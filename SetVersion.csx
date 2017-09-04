@@ -51,7 +51,10 @@ public class Program
             string buildnumber = $"0.0.{buildcounter}";
             Log($"Setting build number: '{buildnumber}'");
 
-            Log($"##teamcity[buildNumber '{buildnumber}']");
+            if (args.Length != 1 || args[0] != "-dryrun")
+            {
+                Log($"##teamcity[buildNumber '{buildnumber}']");
+            }
         }
 
         return 0;
