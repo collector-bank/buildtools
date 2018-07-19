@@ -1,12 +1,82 @@
+#r "System.Xml.Linq"
+
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 public class Program
 {
     public static int Main(string[] args)
+    {
+        bool updateprojectfiles = args.Contains("-updateprojectfiles");
+        bool dryrun = args.Contains("-dryrun");
+
+        string version = SetTeamcityVersion(dryrun);
+
+        if (updateprojectfiles && version != null)
+        {
+            UpdateProjectFiles(version, dryrun);
+        }
+
+        return 0;
+    }
+
+    private static void UpdateProjectFiles(string version, bool dryrun)
+    {
+        string[] files = Directory.GetFiles(".", "*.csproj", SearchOption.AllDirectories)
+            .Select(f => f.StartsWith(@".\") ? f.Substring(2) : f)
+            .ToArray();
+
+        Log($"Found {files.Length} projects.");
+
+        foreach (string filename in files)
+        {
+            bool modified = false;
+            Log($"Reading: '{filename}'");
+            var xdoc = XDocument.Load(filename);
+
+            var groups = xdoc
+                .Elements("Project")
+                .Elements("PropertyGroup")
+                .ToList();
+
+            Log($"Found {groups.Count} PropertyGroups.");
+
+            foreach (var group in groups)
+            {
+                var nodes = group
+                    .Elements()
+                    .Where(e => e.Name == "Version" || e.Name == "AssemblyVersion" || e.Name == "FileVersion" || e.Name == "ProductVersion")
+                    .ToList();
+
+                foreach (var node in nodes)
+                {
+                    if (node.Value != version)
+                    {
+                        node.Value = version;
+                        modified = true;
+                    }
+                }
+
+                if (group.Elements("Version").Count() == 0)
+                {
+                    group.Add(new XElement("Version", version));
+                    modified = true;
+                }
+            }
+
+            if (modified)
+            {
+                Log($"Saving: '{filename}'");
+                xdoc.Save(filename);
+            }
+        }
+    }
+
+    static string SetTeamcityVersion(bool dryrun)
     {
         Dictionary<string, string> tcprops = GetTeamcityVariables();
 
@@ -25,13 +95,20 @@ public class Program
         else
         {
             LogColor("Couldn't find any branch name.", ConsoleColor.Yellow);
-            return 0;
+            return null;
         }
 
+        string tcisdefault = tcprops.ContainsKey("teamcity.build.branch.is_default") ? tcprops["teamcity.build.branch.is_default"] : null;
+        Log("teamcity.build.branch.is_default: " + (tcisdefault == null ? "<null>" : $"'{tcisdefault}'"));
 
-        if (branchname == "master" || branchname == "refs/heads/master")
+        bool isdefaultbranch = tcisdefault == "true" ? true : false;
+
+
+        if (branchname == "master" || branchname == "refs/heads/master" || isdefaultbranch)
         {
-            Log($"On master branch: '{branchname}', keeping build number.");
+            Log($"On master/default branch: '{branchname}', keeping build number.");
+            string buildnumber = tcprops["build.number"];
+            return buildnumber;
         }
         else
         {
@@ -44,20 +121,20 @@ public class Program
             else
             {
                 LogColor("Couldn't find any build counter.", ConsoleColor.Yellow);
-                return 0;
+                return null;
             }
 
 
             string buildnumber = $"0.0.{buildcounter}";
             Log($"Setting build number: '{buildnumber}'");
 
-            if (args.Length != 1 || args[0] != "-dryrun")
+            if (!dryrun)
             {
                 Log($"##teamcity[buildNumber '{buildnumber}']");
             }
-        }
 
-        return 0;
+            return buildnumber;
+        }
     }
 
     private static Dictionary<string, string> GetTeamcityVariables()
