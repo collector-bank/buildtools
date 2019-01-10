@@ -36,9 +36,11 @@ public class Program
             Log($"Reading: '{filename}'");
             var xdoc = XDocument.Load(filename);
 
+            XNamespace ns = xdoc.Root.Name.Namespace;
+
             var groups = xdoc
-                .Elements("Project")
-                .Elements("PropertyGroup")
+                .Elements(ns + "Project")
+                .Elements(ns + "PropertyGroup")
                 .ToList();
 
             Log($"Found {groups.Count} PropertyGroups.");
@@ -47,7 +49,7 @@ public class Program
             {
                 var nodes = group
                     .Elements()
-                    .Where(e => e.Name == "Version" || e.Name == "AssemblyVersion" || e.Name == "FileVersion" || e.Name == "ProductVersion")
+                    .Where(e => e.Name.LocalName == "Version" || e.Name.LocalName == "AssemblyVersion" || e.Name.LocalName == "FileVersion" || e.Name.LocalName == "ProductVersion")
                     .ToList();
 
                 foreach (var node in nodes)
@@ -59,9 +61,9 @@ public class Program
                     }
                 }
 
-                if (group.Elements("Version").Count() == 0)
+                if (group.Elements(ns + "Version").Count() == 0)
                 {
-                    group.Add(new XElement("Version", version));
+                    group.Add(new XElement(ns + "Version", version));
                     modified = true;
                 }
             }
