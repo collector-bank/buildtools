@@ -9,14 +9,25 @@ public class Program
 {
     public static int Main(string[] args)
     {
-        bool updateprojectfiles = args.Contains("-updateprojectfiles");
-        bool dryrun = args.Contains("-dryrun");
+        if (args.Contains("-?") || args.Contains("-h") || args.Contains("--help"))
+        {
+            Log("Usage: SetVersion -updateprojectfiles -updateassemblyinfofiles -dryrun");
+            return 1;
+        }
+
+        bool updateprojectfiles = args.Select(a => a.ToLower()).Contains("-updateprojectfiles");
+        bool updateassemblyinfofiles = args.Select(a => a.ToLower()).Contains("-updateassemblyinfofiles");
+        bool dryrun = args.Select(a => a.ToLower()).Contains("-dryrun");
 
         string version = SetTeamcityVersion(dryrun);
 
         if (updateprojectfiles && version != null)
         {
             UpdateProjectFiles(version, dryrun);
+        }
+        if (updateassemblyinfofiles && version != null)
+        {
+            UpdateAssemblyinfoFiles(version, dryrun);
         }
 
         return 0;
@@ -43,7 +54,7 @@ public class Program
                 .Elements(ns + "PropertyGroup")
                 .ToList();
 
-            Log($"Found {groups.Count} PropertyGroups.");
+            Log($"Got {groups.Count} PropertyGroups.");
 
             foreach (var group in groups)
             {
@@ -56,6 +67,7 @@ public class Program
                 {
                     if (node.Value != version)
                     {
+                        Log($"{filename}: {node.Value} -> {version}");
                         node.Value = version;
                         modified = true;
                     }
@@ -71,7 +83,86 @@ public class Program
             if (modified)
             {
                 Log($"Saving: '{filename}'");
-                xdoc.Save(filename);
+                if (dryrun)
+                {
+                    Log("Not!");
+                }
+                else
+                {
+                    xdoc.Save(filename);
+                }
+            }
+        }
+    }
+
+    private static void UpdateAssemblyinfoFiles(string version, bool dryrun)
+    {
+        string[] files = Directory.GetFiles(".", "AssemblyInfo.cs", SearchOption.AllDirectories)
+            .Select(f => f.StartsWith(@".\") ? f.Substring(2) : f)
+            .ToArray();
+
+        Log($"Found {files.Length} AssemblyInfo files.");
+
+        bool updatedAssemblyVersion = false;
+        bool updatedAssemblyFileVersion = false;
+
+        foreach (string filename in files)
+        {
+            bool modified = false;
+            Log($"Reading: '{filename}'");
+            List<string> rows = File.ReadAllLines(filename).ToList();
+
+            Log($"Got {rows.Count} rows.");
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                string row = rows[i];
+                int offset = row.IndexOf("Version(\"");
+                if (row.StartsWith("[assembly: ") && offset >= 0 && row.EndsWith("\")]"))
+                {
+                    string newRow = row.Substring(0, offset + 9) + version + row.Substring(row.Length - 3);
+                    if (row != newRow)
+                    {
+                        int offsetVersionName = row.LastIndexOf(' ', offset) + 1;
+                        string versionName = row.Substring(offsetVersionName, offset - offsetVersionName + 7);
+                        string oldVersion = row.Substring(offset + 9, row.Length - offset - 12);
+                        Log($"{filename}: {versionName}: '{oldVersion}' -> '{version}'");
+                        rows[i] = newRow;
+                        modified = true;
+
+                        if (versionName == "AssemblyVersion")
+                        {
+                            updatedAssemblyVersion = true;
+                        }
+                        if (versionName == "AssemblyFileVersion")
+                        {
+                            updatedAssemblyFileVersion = true;
+                        }
+                    }
+                }
+            }
+            if (!updatedAssemblyVersion)
+            {
+                Log($"{filename}: AssemblyVersion: -> '{version}'");
+                rows.Add($"[assembly: AssemblyVersion(\"{version}\")]");
+            }
+            if (!updatedAssemblyFileVersion)
+            {
+                Log($"{filename}: AssemblyFileVersion: -> '{version}'");
+                rows.Add($"[assembly: AssemblyFileVersion(\"{version}\")]");
+            }
+
+            if (modified)
+            {
+                Log($"Saving: '{filename}'");
+                if (dryrun)
+                {
+                    Log("Not!");
+                }
+                else
+                {
+                    File.WriteAllLines(filename, rows);
+                }
             }
         }
     }
