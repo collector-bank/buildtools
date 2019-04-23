@@ -9,18 +9,36 @@ public class Program
 {
     public static int Main(string[] args)
     {
+        string usage = "Usage: SetVersion -updateprojectfiles -updateassemblyinfofiles -updatenuspecfiles -dryrun [explicitversion]";
+
         if (args.Contains("-?") || args.Contains("-h") || args.Contains("--help"))
         {
-            Log("Usage: SetVersion -updateprojectfiles -updateassemblyinfofiles -updatenuspecfiles -dryrun");
+            Log(usage);
             return 1;
         }
 
-        bool updateprojectfiles = args.Select(a => a.ToLower()).Contains("-updateprojectfiles");
-        bool updateassemblyinfofiles = args.Select(a => a.ToLower()).Contains("-updateassemblyinfofiles");
-        bool updatenuspecfiles = args.Select(a => a.ToLower()).Contains("-updatenuspecfiles");
-        bool dryrun = args.Select(a => a.ToLower()).Contains("-dryrun");
+        string[] parsedArgs = args;
 
-        string version = SetTeamcityVersion(dryrun);
+        bool updateprojectfiles = ParseFlag(parsedArgs, "-updateprojectfiles", out parsedArgs);
+        bool updateassemblyinfofiles = ParseFlag(parsedArgs, "-updateassemblyinfofiles", out parsedArgs);
+        bool updatenuspecfiles = ParseFlag(parsedArgs, "-updatenuspecfiles", out parsedArgs);
+        bool dryrun = ParseFlag(parsedArgs, "-dryrun", out parsedArgs);
+
+        string version;
+        if (parsedArgs.Length == 0)
+        {
+            version = SetTeamcityVersion(dryrun);
+        }
+        else if (parsedArgs.Length == 1)
+        {
+            version = parsedArgs[0];
+        }
+        else
+        {
+            Log(usage);
+            return 1;
+        }
+
 
         if (updateprojectfiles && version != null)
         {
@@ -36,6 +54,15 @@ public class Program
         }
 
         return 0;
+    }
+
+    private static bool ParseFlag(string[] args, string flagname, out string[] parsedArgs)
+    {
+        bool found = args.Select(a => a.ToLower()).Contains(flagname);
+
+        parsedArgs = args.Where(a => a != flagname).ToArray();
+
+        return found;
     }
 
     private static void UpdateProjectFiles(string version, bool dryrun)
