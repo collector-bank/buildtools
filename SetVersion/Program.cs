@@ -11,12 +11,13 @@ public class Program
     {
         if (args.Contains("-?") || args.Contains("-h") || args.Contains("--help"))
         {
-            Log("Usage: SetVersion -updateprojectfiles -updateassemblyinfofiles -dryrun");
+            Log("Usage: SetVersion -updateprojectfiles -updateassemblyinfofiles -updatenuspecfiles -dryrun");
             return 1;
         }
 
         bool updateprojectfiles = args.Select(a => a.ToLower()).Contains("-updateprojectfiles");
         bool updateassemblyinfofiles = args.Select(a => a.ToLower()).Contains("-updateassemblyinfofiles");
+        bool updatenuspecfiles = args.Select(a => a.ToLower()).Contains("-updatenuspecfiles");
         bool dryrun = args.Select(a => a.ToLower()).Contains("-dryrun");
 
         string version = SetTeamcityVersion(dryrun);
@@ -28,6 +29,10 @@ public class Program
         if (updateassemblyinfofiles && version != null)
         {
             UpdateAssemblyinfoFiles(version, dryrun);
+        }
+        if (updatenuspecfiles && version != null)
+        {
+            UpdateNuspecFiles(version, dryrun);
         }
 
         return 0;
@@ -167,6 +172,68 @@ public class Program
         }
     }
 
+    private static void UpdateNuspecFiles(string version, bool dryrun)
+    {
+        string[] files = Directory.GetFiles(".", "*.nuspec", SearchOption.AllDirectories)
+            .Select(f => f.StartsWith(@".\") ? f.Substring(2) : f)
+            .ToArray();
+
+        Log($"Found {files.Length} nuspec files.");
+
+        foreach (string filename in files)
+        {
+            bool modified = false;
+            Log($"Reading: '{filename}'");
+            var xdoc = XDocument.Load(filename);
+
+            XNamespace ns = xdoc.Root.Name.Namespace;
+
+            var metadatas = xdoc
+                .Elements(ns + "package")
+                .Elements(ns + "metadata")
+                .ToList();
+
+            Log($"Got {metadatas.Count} metadata elements.");
+
+            foreach (var metadata in metadatas)
+            {
+                var versionElements = metadata
+                    .Elements()
+                    .Where(e => e.Name.LocalName == "version")
+                    .ToList();
+
+                foreach (var versionElement in versionElements)
+                {
+                    if (versionElement.Value != version)
+                    {
+                        Log($"{filename}: {versionElement.Value} -> {version}");
+                        versionElement.Value = version;
+                        modified = true;
+                    }
+                }
+
+                if (metadatas.Elements(ns + "version").Count() == 0)
+                {
+                    metadatas.Add(new XElement(ns + "version", version));
+                    modified = true;
+                }
+            }
+
+            if (modified)
+            {
+                Log($"Saving: '{filename}'");
+                if (dryrun)
+                {
+                    Log("Not!");
+                }
+                else
+                {
+                    xdoc.Save(filename);
+                }
+            }
+        }
+    }
+
     static string SetTeamcityVersion(bool dryrun)
     {
         Dictionary<string, string> tcprops = GetTeamcityVariables();
@@ -185,7 +252,7 @@ public class Program
         }
         else
         {
-            LogColor("Couldn't find any branch name.", ConsoleColor.Yellow);
+            Log("Couldn't find any branch name.", ConsoleColor.Yellow);
             return null;
         }
 
@@ -211,7 +278,7 @@ public class Program
             }
             else
             {
-                LogColor("Couldn't find any build counter.", ConsoleColor.Yellow);
+                Log("Couldn't find any build counter.", ConsoleColor.Yellow);
                 return null;
             }
 
@@ -235,12 +302,12 @@ public class Program
         string buildpropfile = Environment.GetEnvironmentVariable("TEAMCITY_BUILD_PROPERTIES_FILE");
         if (string.IsNullOrEmpty(buildpropfile))
         {
-            LogColor("Couldn't find Teamcity build properties file.", ConsoleColor.Yellow);
+            Log("Couldn't find Teamcity build properties file.", ConsoleColor.Yellow);
             return empty;
         }
         if (!File.Exists(buildpropfile))
         {
-            LogColor($"Couldn't find Teamcity build properties file: '{buildpropfile}'", ConsoleColor.Yellow);
+            Log($"Couldn't find Teamcity build properties file: '{buildpropfile}'", ConsoleColor.Yellow);
             return empty;
         }
 
@@ -252,12 +319,12 @@ public class Program
         string configpropfile = valuesBuild["teamcity.configuration.properties.file"];
         if (string.IsNullOrEmpty(configpropfile))
         {
-            LogColor("Couldn't find Teamcity config properties file.", ConsoleColor.Yellow);
+            Log("Couldn't find Teamcity config properties file.", ConsoleColor.Yellow);
             return empty;
         }
         if (!File.Exists(configpropfile))
         {
-            LogColor($"Couldn't find Teamcity config properties file: '{configpropfile}'", ConsoleColor.Yellow);
+            Log($"Couldn't find Teamcity config properties file: '{configpropfile}'", ConsoleColor.Yellow);
             return empty;
         }
 
@@ -292,7 +359,7 @@ public class Program
         Console.WriteLine(message);
     }
 
-    private static void LogColor(string message, ConsoleColor color)
+    private static void Log(string message, ConsoleColor color)
     {
         ConsoleColor oldcolor = Console.ForegroundColor;
         try
