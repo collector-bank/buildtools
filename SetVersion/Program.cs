@@ -68,7 +68,7 @@ public class Program
     private static void UpdateProjectFiles(string version, bool dryrun)
     {
         string[] files = Directory.GetFiles(".", "*.csproj", SearchOption.AllDirectories)
-            .Select(f => f.StartsWith(@".\") ? f.Substring(2) : f)
+            .Select(f => f.StartsWith(@".\") || f.StartsWith("./") ? f.Substring(2) : f)
             .ToArray();
 
         Log($"Found {files.Length} projects.");
@@ -130,7 +130,7 @@ public class Program
     private static void UpdateAssemblyinfoFiles(string version, bool dryrun)
     {
         string[] files = Directory.GetFiles(".", "AssemblyInfo.cs", SearchOption.AllDirectories)
-            .Select(f => f.StartsWith(@".\") ? f.Substring(2) : f)
+            .Select(f => f.StartsWith(@".\") || f.StartsWith("./") ? f.Substring(2) : f)
             .ToArray();
 
         Log($"Found {files.Length} AssemblyInfo files.");
@@ -202,7 +202,7 @@ public class Program
     private static void UpdateNuspecFiles(string version, bool dryrun)
     {
         string[] files = Directory.GetFiles(".", "*.nuspec", SearchOption.AllDirectories)
-            .Select(f => f.StartsWith(@".\") ? f.Substring(2) : f)
+            .Select(f => f.StartsWith(@".\") || f.StartsWith("./") ? f.Substring(2) : f)
             .ToArray();
 
         Log($"Found {files.Length} nuspec files.");
